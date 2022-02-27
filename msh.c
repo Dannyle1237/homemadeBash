@@ -73,29 +73,36 @@ int execvpFunc(char *tokens[]){
   return 0;
 }
 
-int main()
-{
-  char * command_string = (char*) malloc( MAX_COMMAND_SIZE );
-  int commandNum = 0; 
-  char *history[15];
-
-  for(int i = 0; i < 15; i++){
-    history[i] = (char*) malloc( MAX_COMMAND_SIZE );
-  }
-  while( 1 )
-  {
-    //Use the commandNum to keep track of the order of commands and store it into the string array history
+//creating a linked list to keep track of our history of commands
+struct historyNode {
+  char command[MAX_COMMAND_SIZE];
+  struct historyNode *next;
+};
 
 
-    // Print out the msh prompt
-    printf ("\nmsh> ");
 
-    // Read the command from the commandline.  The
-    // maximum command that will be read is MAX_COMMAND_SIZE
-    // This while command will wait here until the user
-    // inputs something since fgets returns NULL when there
-    // is no input
-    while( !fgets (command_string, MAX_COMMAND_SIZE, stdin) );
+//Function implement for us to easily run a command when the user inputs !n. 
+int rerunCommand(struct historyNode *head, struct historyNode *current, char* command_string, int count){
+  int gettingCommand = 0;
+  while(gettingCommand == 0){
+    //store input in history and move current command pointer up to keep command history updated
+
+    strcpy(current->command, command_string);
+    current->next = NULL;
+    current->next = (struct historyNode*) malloc(sizeof(struct historyNode));
+    current = current->next;
+
+
+    //Once we reach out 15 command limit, we must only remove the first command and add on the new one. 
+    if(count == 15){
+      struct historyNode* temp = head;
+      head = head->next;
+      //free(temp);
+    }
+    else{
+      count++;
+    }
+
     /* Parse input */
     char *token[MAX_NUM_ARGUMENTS];
 
@@ -134,7 +141,130 @@ int main()
       printf("token[%d] = %s\n", token_index, token[token_index] );  
     }
     */
-    strcpy(history[commandNum], command_string);
+    //check for an empty string before everything to avoid segfaulting
+    if(token[0] == '\0'){
+      continue;
+    }
+
+    if(strcasecmp(token[0],"quit") == 0){
+      exit(0);
+    }
+    else if(strcmp(token[0], "cd") == 0){
+      chdir(token[1]);
+    }
+    //We iterate through our linked list and print out the history of the commands  
+    else if(strcmp(token[0], "history") == 0){
+      struct historyNode *temp = head;
+      printf("\n");
+      for(int i = 0; temp->next != NULL; i++){
+        printf("%d:%s",i, temp->command);
+        temp = temp->next;
+      }
+    }
+    else if(*token[0] == '!'){
+      struct historyNode *temp = head;
+      //We use memmove to delete the ! in our and only have the int left over 
+      memmove(token[0], token[0] + 1, strlen(token[0]));
+      if(atoi(token[0]) > count){
+        printf("\nCommand not in history");
+      }
+      else{
+        for(int i = 0; i < atoi(token[0]); i++){
+          temp = temp->next;
+        }
+        count = rerunCommand(head, current, temp->command, count);
+      }
+    }
+    else if(execvpFunc(token) == 0){
+    }
+    else{
+      printf("\n%s: Command is not found", token[0]);
+      return 0;
+    }
+    free( head_ptr );
+    gettingCommand = 1;
+    return count;
+  }
+  return count;
+}
+
+int main()
+{
+  char * command_string = (char*) malloc( MAX_COMMAND_SIZE );
+  struct historyNode *head = NULL;
+  head = (struct historyNode*) malloc(sizeof(struct historyNode));
+  struct historyNode *current = head;
+
+  int count = 0;
+
+  while( 1 )
+  {
+    // Print out the msh prompt
+    printf ("\nmsh> ");
+
+    // Read the command from the commandline.  The
+    // maximum command that will be read is MAX_COMMAND_SIZE
+    // This while command will wait here until the user
+    // inputs something since fgets returns NULL when there
+    // is no input
+    while( !fgets (command_string, MAX_COMMAND_SIZE, stdin) );
+
+    //store input in history and move current command pointer up to keep command history updated
+
+    strcpy(current->command, command_string);
+    current->next = NULL;
+    current->next = (struct historyNode*) malloc(sizeof(struct historyNode));
+    current = current->next;
+
+
+    //Once we reach out 15 command limit, we must only remove the first command and add on the new one. 
+    if(count == 15){
+      struct historyNode* temp = head;
+      head = head->next;
+      //free(temp);
+    }
+    else{
+      count++;
+    }
+
+    /* Parse input */
+    char *token[MAX_NUM_ARGUMENTS];
+
+    int token_count = 0;                                 
+                                                            
+    // Pointer to point to the token
+    // parsed by strsep
+    char *argument_ptr;                                         
+                                                            
+    char *working_string  = strdup( command_string );                
+
+    // we are going to move the working_string pointer so
+    // keep track of its original value so we can deallocate
+    // the correct amount at the end
+    char *head_ptr = working_string;
+
+    // Tokenize the input strings with whitespace used as the delimiter
+    while ( ( (argument_ptr = strsep(&working_string, WHITESPACE ) ) != NULL) && 
+              (token_count<MAX_NUM_ARGUMENTS))
+    {
+      token[token_count] = strndup( argument_ptr, MAX_COMMAND_SIZE );
+      if( strlen( token[token_count] ) == 0 )
+      {
+        token[token_count] = NULL;
+      }
+        token_count++;
+    }
+
+
+    // Now print the tokenized input as a debug check
+    // \TODO Remove this code and replace with your shell functionality
+
+    /*int token_index  = 0;
+    for( token_index = 0; token_index < token_count; token_index ++ ) 
+    {
+      printf("token[%d] = %s\n", token_index, token[token_index] );  
+    }
+    */
 
     if(token[0] == '\0'){
       continue;
@@ -147,9 +277,20 @@ int main()
       chdir(token[1]);
     }
     else if(strcmp(token[0], "history") == 0){
-      for(int i = 0; strcmp(history[i], "") != 0; i++){
-        printf("%d:%s",i, history[i]);
+      struct historyNode *temp = head;
+      printf("\n");
+      for(int i = 0; temp->next != NULL; i++){
+        printf("%d:%s",i, temp->command);
+        temp = temp->next;
       }
+    }
+    else if(*token[0] == '!'){
+      struct historyNode *temp = head;
+      memmove(token[0], token[0] + 1, strlen(token[0]));
+      for(int i = 0; i < atoi(token[0]); i++){
+        temp = temp->next;
+      }
+      count = rerunCommand(head, current, temp->command, count);
     }
     else if(execvpFunc(token) == 0){
     }
@@ -158,13 +299,6 @@ int main()
       return 0;
     }
     free( head_ptr );
-    /*printf("\n0%s", history[0]);
-    printf("\n1%s", history[1]);
-    printf("\n2%s", history[2]);
-    printf("\n3%s", history[3]);
-    printf("\n4%s", history[4]);
-    printf("\n%d", commandNum);*/
-    commandNum ++;
   }
   return 0;
   // e2520ca2-76f3-11ec-90d6-0242ac120003
