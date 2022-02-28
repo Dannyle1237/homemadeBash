@@ -46,7 +46,8 @@ ID: 1001794802
 #define MAX_NUM_ARGUMENTS 5     // Mav shell only supports four arguments
 
 //This function allows us to call the execvp command, which allows us to quickly check all commands.
-int execvpFunc(char *tokens[]){
+pid_t execvpFunc(char *tokens[])
+{
   pid_t pid = fork( );
   if( pid == 0 )
   {
@@ -70,7 +71,7 @@ int execvpFunc(char *tokens[]){
     int status;
     wait( & status );
   }
-  return 0;
+  return pid;
 }
 
 //creating a linked list to keep track of our history of commands
@@ -79,10 +80,9 @@ struct historyNode {
   struct historyNode *next;
 };
 
-
-
 //Function implement for us to easily run a command when the user inputs !n. 
-int rerunCommand(struct historyNode *head, struct historyNode *current, char* command_string, int count){
+int rerunCommand(struct historyNode *head, struct historyNode *current, char* command_string, int count, pid_t pidhistory[15], int pid_index)
+{
   int gettingCommand = 0;
   while(gettingCommand == 0){
     //store input in history and move current command pointer up to keep command history updated
@@ -172,14 +172,27 @@ int rerunCommand(struct historyNode *head, struct historyNode *current, char* co
         for(int i = 0; i < atoi(token[0]); i++){
           temp = temp->next;
         }
-        count = rerunCommand(head, current, temp->command, count);
+        count = rerunCommand(head, current, temp->command, count, pidhistory, pid_index);
       }
     }
-    else if(execvpFunc(token) == 0){
+    else if(strcmp(token[0], "pidhistory") == 0){
+      int index = pid_index;
+      for(int i = 0; i < 15; i++){
+        printf("%d\n", pidhistory[index++]);
+        if(index > 14){
+          index = 0;
+        }
+      }
     }
     else{
-      printf("\n%s: Command is not found", token[0]);
-      return 0;
+      pid_t temp = execvpFunc(token);
+      if(temp != -1){
+        pidhistory[pid_index++] = temp;
+      }
+      else{
+        printf("\n%s: Command is not found", token[0]);
+        return 0;
+      }
     }
     free( head_ptr );
     gettingCommand = 1;
@@ -191,12 +204,17 @@ int rerunCommand(struct historyNode *head, struct historyNode *current, char* co
 int main()
 {
   char * command_string = (char*) malloc( MAX_COMMAND_SIZE );
+
+  //Creating a linked list to store our history of commands in. 
   struct historyNode *head = NULL;
   head = (struct historyNode*) malloc(sizeof(struct historyNode));
   struct historyNode *current = head;
 
+  //using count to keep track of which command number we are on, but we leave 15 as the max. 
   int count = 0;
 
+  int pid_index = 0;
+  pid_t pidhistory[15];
   while( 1 )
   {
     // Print out the msh prompt
@@ -210,7 +228,6 @@ int main()
     while( !fgets (command_string, MAX_COMMAND_SIZE, stdin) );
 
     //store input in history and move current command pointer up to keep command history updated
-
     strcpy(current->command, command_string);
     current->next = NULL;
     current->next = (struct historyNode*) malloc(sizeof(struct historyNode));
@@ -221,10 +238,14 @@ int main()
     if(count == 15){
       struct historyNode* temp = head;
       head = head->next;
-      //free(temp);
+      //free(temp); :Program will bug out if temp is freed. 
     }
     else{
       count++;
+    } 
+
+    if(pid_index > 14){
+      pid_index = 0;
     }
 
     /* Parse input */
@@ -276,6 +297,7 @@ int main()
     else if(strcmp(token[0], "cd") == 0){
       chdir(token[1]);
     }
+    //We iterate through our linked list (head and current) in order to find out history of commands
     else if(strcmp(token[0], "history") == 0){
       struct historyNode *temp = head;
       printf("\n");
@@ -290,14 +312,29 @@ int main()
       for(int i = 0; i < atoi(token[0]); i++){
         temp = temp->next;
       }
-      count = rerunCommand(head, current, temp->command, count);
+      //We must pass our pointers into the rerun command in order to ensure our history is still getting updated
+      count = rerunCommand(head, current, temp->command, count, pidhistory, pid_index);
     }
-    else if(execvpFunc(token) == 0){
+    else if(strcmp(token[0], "pidhistory") == 0){
+      int index = pid_index;
+      for(int i = 0; i < 15; i++){
+        printf("%d\n", pidhistory[index++]);
+        if(index > 14){
+          index = 0;
+        }
+      }
     }
     else{
-      printf("\n%s: Command is not found", token[0]);
-      return 0;
+      pid_t temp = execvpFunc(token);
+      if(temp != -1){
+        pidhistory[pid_index++] = temp;
+      }
+      else{
+        printf("\n%s: Command is not found", token[0]);
+        return 0;
+      }
     }
+
     free( head_ptr );
   }
   return 0;
