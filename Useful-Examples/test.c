@@ -7,10 +7,11 @@
 #include <signal.h>
 
 int main(){
-    char *test = (char*) malloc(40);
-    while(1){
-        fgets(test, 40, stdin);
-        printf("fsdfs");
+    if(!0){
+        printf("Fuck");
+    }
+    if(!100){
+        printf("ass");
     }
 
 }

@@ -166,7 +166,6 @@ int rerunCommand(struct historyNode *head, struct historyNode *current, char* co
       //We use memmove to delete the ! in our and only have the int left over 
       memmove(token[0], token[0] + 1, strlen(token[0]));
       if(atoi(token[0]) > count){
-        printf("\nCommand not in history");
       }
       else{
         for(int i = 0; i < atoi(token[0]); i++){
@@ -207,14 +206,19 @@ int main()
 
   //Creating a linked list to store our history of commands in. 
   struct historyNode *head = NULL;
-  head = (struct historyNode*) malloc(sizeof(struct historyNode));
-  struct historyNode *current = head;
+  struct historyNode *current;
+  //head = (struct historyNode*) malloc(sizeof(struct historyNode));
+  //struct historyNode *current = head;
 
   //using count to keep track of which command number we are on, but we leave 15 as the max. 
   int count = 0;
 
   int pid_index = 0;
   pid_t pidhistory[15];
+  for(int i = 0; i < 15; i++){
+    pidhistory[i] = -1;
+  }
+
   while( 1 )
   {
     // Print out the msh prompt
@@ -228,31 +232,46 @@ int main()
     while( !fgets (command_string, MAX_COMMAND_SIZE, stdin) );
 
     //store input in history and move current command pointer up to keep command history updated
-    strcpy(current->command, command_string);
-    current->next = NULL;
-    current->next = (struct historyNode*) malloc(sizeof(struct historyNode));
-    current = current->next;
+    
+
+    if( head == NULL )
+    {
+      head = (struct historyNode*) malloc(sizeof(struct historyNode));
+      head -> next = NULL;
+      current = head;
+    }
+    else
+    {
+      current->next = (struct historyNode*) malloc(sizeof(struct historyNode));
+      current = current->next;
+      current -> next = NULL;
+    }
+    
+    if( current )
+    {  
+      strncpy(current->command, command_string, 255);
+    }
+    else
+    {
+      perror("Problem allocating linked list node");
+    }
 
 
     //Once we reach out 15 command limit, we must only remove the first command and add on the new one. 
     if(count == 15){
       struct historyNode* temp = head;
       head = head->next;
-      //free(temp); :Program will bug out if temp is freed. 
+      free(temp); 
     }
     else{
       count++;
     } 
 
-    if(pid_index > 14){
-      pid_index = 0;
-    }
-
     /* Parse input */
     char *token[MAX_NUM_ARGUMENTS];
 
     int token_count = 0;                                 
-                                                            
+
     // Pointer to point to the token
     // parsed by strsep
     char *argument_ptr;                                         
@@ -276,22 +295,11 @@ int main()
         token_count++;
     }
 
-
-    // Now print the tokenized input as a debug check
-    // \TODO Remove this code and replace with your shell functionality
-
-    /*int token_index  = 0;
-    for( token_index = 0; token_index < token_count; token_index ++ ) 
-    {
-      printf("token[%d] = %s\n", token_index, token[token_index] );  
-    }
-    */
-
     if(token[0] == '\0'){
       continue;
     }
 
-    if(strcasecmp(token[0],"quit") == 0){
+    if(strcasecmp(token[0],"quit") == 0 || strcasecmp(token[0],"exit") == 0){
       exit(0);
     }
     else if(strcmp(token[0], "cd") == 0){
@@ -301,16 +309,23 @@ int main()
     else if(strcmp(token[0], "history") == 0){
       struct historyNode *temp = head;
       printf("\n");
-      for(int i = 0; temp->next != NULL; i++){
-        printf("%d:%s",i, temp->command);
+      int i = 0;
+      while( temp )
+      {
+        printf("%d:%s",i++, temp->command);
         temp = temp->next;
       }
     }
     else if(*token[0] == '!'){
       struct historyNode *temp = head;
       memmove(token[0], token[0] + 1, strlen(token[0]));
-      for(int i = 0; i < atoi(token[0]); i++){
-        temp = temp->next;
+      if(atoi(token[0]) > count){
+        printf("Command not found in history");
+      }
+      else{
+        for(int i = 0; i < atoi(token[0]); i++){
+          temp = temp->next;
+        }
       }
       //We must pass our pointers into the rerun command in order to ensure our history is still getting updated
       count = rerunCommand(head, current, temp->command, count, pidhistory, pid_index);
@@ -318,15 +333,20 @@ int main()
     else if(strcmp(token[0], "pidhistory") == 0){
       int index = pid_index;
       for(int i = 0; i < 15; i++){
-        printf("%d\n", pidhistory[index++]);
-        if(index > 14){
-          index = 0;
+        if(pidhistory[i] != -1){
+          printf("%d:%d\n", i, pidhistory[i]);
         }
       }
     }
     else{
       pid_t temp = execvpFunc(token);
       if(temp != -1){
+        if(pid_index > 14){
+          for(int i = 0; i < 14 - 1; i++){
+            pidhistory[i] = pidhistory[i + 1];
+          }
+          pid_index--;
+        }
         pidhistory[pid_index++] = temp;
       }
       else{
@@ -334,7 +354,6 @@ int main()
         return 0;
       }
     }
-
     free( head_ptr );
   }
   return 0;
